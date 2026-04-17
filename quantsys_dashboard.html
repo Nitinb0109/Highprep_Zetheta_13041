@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuantSys — Trading Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0e14;
+    --card: #141720;
+    --border: #1e2235;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --blue: #3b82f6;
+    --green: #22c55e;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --purple: #8b5cf6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  /* Header */
+  .header {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 28px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .brand { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 18px; letter-spacing: 0.15em; color: var(--text); }
+  .badge { font-size: 9px; font-family: 'IBM Plex Mono', monospace; letter-spacing: 0.2em; color: var(--blue); border: 1px solid var(--blue); padding: 2px 8px; border-radius: 3px; }
+  .header-sub { font-size: 11px; color: var(--muted); margin-top: 3px; letter-spacing: 0.04em; }
+  .live-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* Layout */
+  .main { padding: 20px 28px 48px; max-width: 1400px; }
+
+  /* Metrics row */
+  .metrics { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 16px; }
+  .metric-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .metric-label { font-size: 10px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+  .metric-value { font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 500; }
+  .metric-sub { font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .pos { color: var(--green); } .neg { color: var(--red); } .neu { color: var(--text); }
+
+  /* Chart cards */
+  .chart-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; }
+  .chart-title { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 14px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .row3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .row1 { margin-bottom: 12px; }
+
+  /* Legend */
+  .legend { display: flex; gap: 16px; margin-bottom: 10px; }
+  .leg { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+  .leg-dot { width: 12px; height: 3px; border-radius: 2px; }
+
+  /* Strategy selector */
+  .selector { display: flex; gap: 8px; margin-bottom: 16px; }
+  .sel-btn { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 16px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); cursor: pointer; transition: all 0.15s; letter-spacing: 0.05em; }
+  .sel-btn:hover { border-color: var(--blue); color: var(--blue); }
+  .sel-btn.active { background: rgba(59,130,246,0.12); border-color: var(--blue); color: var(--blue); }
+
+  /* Risk table */
+  .risk-table { width: 100%; border-collapse: collapse; font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
+  .risk-table th { color: var(--muted); font-weight: 400; text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 10px; letter-spacing: 0.07em; }
+  .risk-table td { padding: 7px 10px; border-bottom: 1px solid rgba(30,34,53,0.5); }
+  .risk-table tr:last-child td { border-bottom: none; }
+  .pass { color: var(--green); } .warn { color: var(--amber); } .fail { color: var(--red); }
+  .pill { font-size: 9px; padding: 1px 7px; border-radius: 10px; font-weight: 500; }
+  .pill-pass { background: rgba(34,197,94,0.12); color: var(--green); }
+  .pill-warn { background: rgba(245,158,11,0.12); color: var(--amber); }
+
+  /* Progress bar */
+  .bar-wrap { background: rgba(255,255,255,0.06); border-radius: 2px; height: 4px; flex:1; }
+  .bar-fill { height: 4px; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-left">
+      <span class="brand">QUANTSYS</span>
+      <span class="badge">PAPER TRADING</span>
+      <div class="live-dot"></div>
+    </div>
+    <div class="header-sub">Quantitative Trading System &nbsp;·&nbsp; IIT Roorkee × Zetheta 2026 &nbsp;·&nbsp; <span id="clock"></span></div>
+  </div>
+  <div style="text-align:right">
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:22px;color:var(--green);">$1,174,320</div>
+    <div style="font-size:11px;color:var(--muted);">NAV &nbsp;·&nbsp; <span style="color:var(--green)">+17.43% total return</span></div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- Strategy selector -->
+  <div class="selector">
+    <button class="sel-btn active" onclick="switchStrategy('momentum',this)">MOMENTUM L/S</button>
+    <button class="sel-btn" onclick="switchStrategy('rp',this)">RISK PARITY</button>
+    <button class="sel-btn" onclick="switchStrategy('statarb',this)">STAT ARB</button>
+  </div>
+
+  <!-- Metric cards -->
+  <div class="metrics">
+    <div class="metric-card">
+      <div class="metric-label">Annual Return</div>
+      <div class="metric-value pos" id="m-ret">+16.8%</div>
+      <div class="metric-sub">vs BM: +4.2%</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Sharpe Ratio</div>
+      <div class="metric-value pos" id="m-sharpe">1.34</div>
+      <div class="metric-sub">Sortino: 1.87</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Max Drawdown</div>
+      <div class="metric-value neg" id="m-mdd">−11.2%</div>
+      <div class="metric-sub">Calmar: 1.50</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">VaR 95%</div>
+      <div class="metric-value neu" id="m-var">0.87%</div>
+      <div class="metric-sub">CVaR: 1.21%</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Win Rate</div>
+      <div class="metric-value pos" id="m-wr">54.3%</div>
+      <div class="metric-sub">Profit Factor: 1.42</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Avg IC</div>
+      <div class="metric-value pos" id="m-ic">0.041</div>
+      <div class="metric-sub">ICIR: 1.12</div>
+    </div>
+  </div>
+
+  <!-- Equity curve -->
+  <div class="row1 chart-card">
+    <div class="chart-title">Equity Curves (Normalised, Base = 1.0)</div>
+    <div class="legend">
+      <div class="leg"><div class="leg-dot" style="background:var(--blue)"></div>Momentum L/S</div>
+      <div class="leg"><div class="leg-dot" style="background:var(--green)"></div>Risk Parity</div>
+      <div class="leg"><div class="leg-dot" style="background:var(--muted);"></div>S&P 500 Benchmark</div>
+    </div>
+    <div style="height:240px;position:relative"><canvas id="equityChart"></canvas></div>
+  </div>
+
+  <!-- Drawdown + Rolling Sharpe -->
+  <div class="row2">
+    <div class="chart-card">
+      <div class="chart-title">Drawdown (%)</div>
+      <div style="height:160px;position:relative"><canvas id="ddChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Rolling Sharpe Ratio (63-day)</div>
+      <div style="height:160px;position:relative"><canvas id="srChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Monthly returns + Distribution + Risk checks -->
+  <div class="row3">
+    <div class="chart-card">
+      <div class="chart-title">Monthly Returns</div>
+      <div style="height:170px;position:relative"><canvas id="monthlyChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Return Distribution</div>
+      <div style="height:170px;position:relative"><canvas id="histChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Pre-Trade Risk Checks</div>
+      <table class="risk-table">
+        <thead><tr><th>Check</th><th>Value</th><th>Status</th></tr></thead>
+        <tbody id="riskTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Exposure + Positions -->
+  <div class="row2">
+    <div class="chart-card">
+      <div class="chart-title">Current Positions (Weight %)</div>
+      <div id="posTable" style="display:grid;gap:6px;margin-top:4px"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Stress Test Scenarios</div>
+      <table class="risk-table">
+        <thead><tr><th>Scenario</th><th>P&L Impact</th><th>Recovery</th></tr></thead>
+        <tbody id="stressTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Data generation ────────────────────────────────────────────────────────
+function randn() {
+  let u=0,v=0;
+  while(!u) u=Math.random();
+  while(!v) v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+
+function seededRand(seed) {
+  let s = seed;
+  return () => { s = (s*16807+0)%2147483647; return (s-1)/2147483646; };
+}
+
+const N = 756;
+const rng = seededRand(42);
+
+function buildReturns(mu, sig, shocks) {
+  const r = [];
+  for (let i = 0; i < N; i++) {
+    let daily = (rng()-0.5)*1.73*sig + mu;
+    if (shocks) for (const [s,e,adj] of shocks) if (i>=s && i<e) daily+=adj;
+    r.push(daily);
+  }
+  return r;
+}
+
+const momRet  = buildReturns(0.00065, 0.0085, [[100,150,-0.003],[350,400,-0.005],[500,560,0.002]]);
+const rpRet   = buildReturns(0.00040, 0.0055, [[350,400,-0.004]]);
+const bmRet   = buildReturns(0.00045, 0.010,  [[350,400,-0.006]]);
+
+function toCurve(rets, init=1.0) {
+  const c=[init]; rets.forEach(r=>c.push(c[c.length-1]*(1+r))); return c.slice(1);
+}
+
+function maxDD(curve) {
+  const dd=[]; let peak=curve[0];
+  curve.forEach(v=>{ if(v>peak)peak=v; dd.push((v-peak)/peak*100); });
+  return dd;
+}
+
+function rollingSharpe(rets, w=63) {
+  return rets.map((_,i)=>{
+    if(i<w) return null;
+    const slice=rets.slice(i-w,i);
+    const mu=slice.reduce((a,b)=>a+b)/w;
+    const sig=Math.sqrt(slice.map(r=>(r-mu)**2).reduce((a,b)=>a+b)/w);
+    return sig<1e-8?0:mu/sig*Math.sqrt(252);
+  });
+}
+
+const momCurve = toCurve(momRet);
+const rpCurve  = toCurve(rpRet);
+const bmCurve  = toCurve(bmRet);
+const momDD    = maxDD(momCurve);
+const rpDD     = maxDD(rpCurve);
+const momSR    = rollingSharpe(momRet);
+
+// Dates
+const dates=[];
+const d0=new Date("2022-01-03");
+for(let i=0;i<N;i++){
+  const d=new Date(d0); d.setDate(d0.getDate()+Math.floor(i*1.4));
+  dates.push(d.toISOString().slice(0,10));
+}
+
+// Monthly aggregation
+const monthlyRet=[], monthlyLabels=[];
+for(let i=0;i<N;i+=21){
+  const s=momRet.slice(i,i+21);
+  monthlyRet.push(s.reduce((a,b)=>a+(1+b),1)-1);
+  monthlyLabels.push(dates[i].slice(0,7));
+}
+
+// Daily histogram
+const histBins=Array.from({length:30},(_,i)=>(i-15)*0.15);
+const histCounts=new Array(30).fill(0);
+momRet.forEach(r=>{
+  const pct=r*100;
+  const idx=Math.max(0,Math.min(29,Math.floor((pct+2.25)/0.15)));
+  histCounts[idx]++;
+});
+
+// ── Chart defaults ────────────────────────────────────────────────────────
+const BASE={
+  responsive:true, maintainAspectRatio:false,
+  plugins:{legend:{display:false},tooltip:{
+    backgroundColor:'#1e2235',titleColor:'#94a3b8',bodyColor:'#e2e8f0',
+    borderColor:'#2d3748',borderWidth:1,
+  }},
+  scales:{
+    x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#4a5568',font:{size:9},maxTicksLimit:8}},
+    y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#4a5568',font:{size:9}}},
+  }
+};
+
+function merge(a,b){return JSON.parse(JSON.stringify({...a,...b}));}
+
+// Equity curve
+new Chart(document.getElementById('equityChart'),{
+  type:'line',
+  data:{labels:dates,datasets:[
+    {data:momCurve,borderColor:'#3b82f6',borderWidth:2,pointRadius:0,
+     fill:true,backgroundColor:'rgba(59,130,246,0.06)',tension:0.1},
+    {data:rpCurve,borderColor:'#22c55e',borderWidth:1.5,pointRadius:0,
+     fill:false,tension:0.1},
+    {data:bmCurve,borderColor:'#4a5568',borderWidth:1.5,pointRadius:0,
+     borderDash:[4,4],fill:false,tension:0.1},
+  ]},
+  options:{...BASE,scales:{
+    x:{...BASE.scales.x},
+    y:{...BASE.scales.y,ticks:{...BASE.scales.y.ticks,callback:v=>v.toFixed(2)}},
+  }}
+});
+
+// Drawdown
+new Chart(document.getElementById('ddChart'),{
+  type:'line',
+  data:{labels:dates,datasets:[
+    {data:momDD,borderColor:'#ef4444',borderWidth:1.5,pointRadius:0,
+     fill:true,backgroundColor:'rgba(239,68,68,0.1)',tension:0.1},
+    {data:rpDD,borderColor:'#22c55e',borderWidth:1,pointRadius:0,fill:false,tension:0.1},
+  ]},
+  options:{...BASE,scales:{
+    x:{...BASE.scales.x},
+    y:{...BASE.scales.y,ticks:{...BASE.scales.y.ticks,callback:v=>v.toFixed(1)+'%'}},
+  }}
+});
+
+// Rolling Sharpe
+const srFiltered=momSR.map((v,i)=>v);
+new Chart(document.getElementById('srChart'),{
+  type:'line',
+  data:{labels:dates,datasets:[{
+    data:srFiltered,borderColor:'#8b5cf6',borderWidth:1.5,pointRadius:0,
+    fill:true,backgroundColor:'rgba(139,92,246,0.08)',tension:0.3,spanGaps:true,
+  }]},
+  options:{...BASE,scales:{
+    x:{...BASE.scales.x},
+    y:{...BASE.scales.y},
+  }}
+});
+
+// Monthly bars
+new Chart(document.getElementById('monthlyChart'),{
+  type:'bar',
+  data:{labels:monthlyLabels,datasets:[{
+    data:monthlyRet.map(r=>+(r*100).toFixed(2)),
+    backgroundColor:monthlyRet.map(r=>r>0?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)'),
+    borderWidth:0,borderRadius:2,
+  }]},
+  options:{...BASE,scales:{
+    x:{...BASE.scales.x,ticks:{...BASE.scales.x.ticks,maxTicksLimit:12}},
+    y:{...BASE.scales.y,ticks:{...BASE.scales.y.ticks,callback:v=>v+'%'}},
+  }}
+});
+
+// Histogram
+new Chart(document.getElementById('histChart'),{
+  type:'bar',
+  data:{labels:histBins.map(b=>b.toFixed(1)+'%'),datasets:[{
+    data:histCounts,
+    backgroundColor:'rgba(59,130,246,0.65)',borderWidth:0,borderRadius:1,
+  }]},
+  options:{...BASE,scales:{
+    x:{...BASE.scales.x,ticks:{...BASE.scales.x.ticks,maxTicksLimit:8}},
+    y:{...BASE.scales.y,ticks:{...BASE.scales.y.ticks}},
+  }}
+});
+
+// ── Risk table ────────────────────────────────────────────────────────────
+const riskChecks=[
+  ["Max Position","8.4%","pass","≤10%"],
+  ["Gross Exposure","142%","pass","≤200%"],
+  ["Net Exposure","12%","pass","≤50%"],
+  ["VaR 95% (1d)","0.87%","pass","≤2.0%"],
+  ["Turnover","18%","pass","≤30%"],
+  ["Drawdown","−3.4%","pass","≤15%"],
+];
+const rt=document.getElementById('riskTable');
+riskChecks.forEach(([n,v,s,lim])=>{
+  rt.innerHTML+=`<tr>
+    <td>${n}</td>
+    <td class="mono ${s==='pass'?'pos':s==='warn'?'warn':'neg'}">${v}</td>
+    <td><span class="pill pill-${s==='pass'?'pass':'warn'}">${s.toUpperCase()}</span></td>
+  </tr>`;
+});
+
+// ── Positions ─────────────────────────────────────────────────────────────
+const positions=[
+  {t:"NVDA", w:9.8, side:"L"},{t:"META",w:8.4,side:"L"},{t:"AAPL",w:7.2,side:"L"},
+  {t:"MSFT",w:6.9,side:"L"},{t:"AMZN",w:5.8,side:"L"},
+  {t:"PFE", w:-7.1,side:"S"},{t:"CVX",w:-6.4,side:"S"},{t:"XOM",w:-5.9,side:"S"},
+  {t:"MRK", w:-5.1,side:"S"},{t:"ABBV",w:-4.8,side:"S"},
+];
+const pt=document.getElementById('posTable');
+positions.forEach(p=>{
+  const pct=Math.abs(p.w); const isL=p.side==="L";
+  pt.innerHTML+=`<div style="display:flex;align-items:center;gap:8px">
+    <span class="mono" style="width:44px;font-size:11px;color:${isL?'var(--green)':'var(--red)'}">${p.side} ${p.t}</span>
+    <div class="bar-wrap">
+      <div class="bar-fill" style="width:${pct/12*100}%;background:${isL?'var(--green)':'var(--red)'}"></div>
+    </div>
+    <span class="mono" style="width:38px;text-align:right;font-size:11px;color:${isL?'var(--green)':'var(--red)'}">${p.w>0?'+':''}${p.w}%</span>
+  </div>`;
+});
+
+// ── Stress table ──────────────────────────────────────────────────────────
+const stress=[
+  ["COVID Crash (−35%)","−7.4%","18 days"],
+  ["Rate Shock 2022 (−20%)","−4.8%","11 days"],
+  ["Flash Crash (−10%)","−2.3%","3 days"],
+  ["Tech Selloff (−40%)","−8.1%","22 days"],
+];
+const st=document.getElementById('stressTable');
+stress.forEach(([s,p,r])=>{
+  st.innerHTML+=`<tr>
+    <td>${s}</td>
+    <td class="mono neg">${p}</td>
+    <td class="mono" style="color:var(--amber)">${r}</td>
+  </tr>`;
+});
+
+// ── Clock ─────────────────────────────────────────────────────────────────
+function updateClock(){
+  document.getElementById('clock').textContent=new Date().toUTCString().slice(0,25)+' UTC';
+}
+updateClock(); setInterval(updateClock,1000);
+
+// ── Strategy switcher ─────────────────────────────────────────────────────
+const strategies = {
+  momentum: {ret:'+16.8%',sharpe:'1.34',mdd:'−11.2%',var:'0.87%',wr:'54.3%',ic:'0.041'},
+  rp:       {ret:'+10.4%',sharpe:'1.08',mdd:'−7.6%', var:'0.54%',wr:'55.1%',ic:'N/A'},
+  statarb:  {ret:'+13.1%',sharpe:'1.21',mdd:'−9.3%', var:'0.68%',wr:'53.8%',ic:'0.029'},
+};
+function switchStrategy(s, btn) {
+  document.querySelectorAll('.sel-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const m = strategies[s];
+  document.getElementById('m-ret').textContent = m.ret;
+  document.getElementById('m-sharpe').textContent = m.sharpe;
+  document.getElementById('m-mdd').textContent = m.mdd;
+  document.getElementById('m-var').textContent = m.var;
+  document.getElementById('m-wr').textContent = m.wr;
+  document.getElementById('m-ic').textContent = m.ic;
+}
+</script>
+</body>
+</html>
